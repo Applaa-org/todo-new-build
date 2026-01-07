@@ -62,7 +62,7 @@ jobs:
         run: |
           echo "🔍 Fixing Kotlin/Compose version compatibility..."
           
-          # Add to gradle.properties
+          # Method 1: Add to gradle.properties (should work but may not be read by all modules)
           if [ -f android/gradle.properties ]; then
             sed -i '/androidx.compose.compiler/d' android/gradle.properties
             echo "" >> android/gradle.properties
@@ -71,33 +71,86 @@ jobs:
             echo "✅ Added to gradle.properties"
           fi
           
-          # Patch root build.gradle to configure all subprojects
-          if [ -f android/build.gradle ]; then
-            # Check if we already added the fix
-            if ! grep -q "suppressKotlinVersionCompatibilityCheck" android/build.gradle; then
-              # Add subprojects configuration at the end using echo
-              echo "" >> android/build.gradle
-              echo "subprojects {" >> android/build.gradle
-              echo "    afterEvaluate { project ->" >> android/build.gradle
-              echo "        if (project.hasProperty(\"android\") && project.plugins.hasPlugin(\"org.jetbrains.kotlin.android\")) {" >> android/build.gradle
-              echo "            try {" >> android/build.gradle
-              echo "                project.android {" >> android/build.gradle
-              echo "                    composeOptions {" >> android/build.gradle
-              echo "                        compiler {" >> android/build.gradle
-              echo "                            suppressKotlinVersionCompatibilityCheck = true" >> android/build.gradle
-              echo "                        }" >> android/build.gradle
-              echo "                    }" >> android/build.gradle
-              echo "                }" >> android/build.gradle
-              echo "            } catch (Exception e) {" >> android/build.gradle
-              echo "                // Ignore if composeOptions not available" >> android/build.gradle
-              echo "            }" >> android/build.gradle
-              echo "        }" >> android/build.gradle
-              echo "    }" >> android/build.gradle
-              echo "}" >> android/build.gradle
-              echo "✅ Patched root build.gradle"
+          # Method 2: Directly patch expo-modules-core build.gradle using Python (more reliable)
+          if [ -f node_modules/expo-modules-core/android/build.gradle ]; then
+            if ! grep -q "suppressKotlinVersionCompatibilityCheck" node_modules/expo-modules-core/android/build.gradle; then
+              python3 << 'PYTHONFIX'
+import re
+
+file_path = "node_modules/expo-modules-core/android/build.gradle"
+with open(file_path, 'r') as f:
+    content = f.read()
+
+# Find the android block and insert composeOptions before its closing brace
+# Pattern: android { ... } - we need to find the matching closing brace
+lines = content.split('\n')
+new_lines = []
+in_android = False
+android_depth = 0
+inserted = False
+
+for i, line in enumerate(lines):
+    # Track android block depth
+    if re.search(r'^\s*android\s*\{', line):
+        in_android = True
+        android_depth = 1
+        new_lines.append(line)
+        continue
+    
+    if in_android:
+        # Count braces to find the end of android block
+        android_depth += line.count('{') - line.count('}')
+        
+        # When we reach the closing brace of android block, insert composeOptions before it
+        if android_depth == 0 and not inserted:
+            # Get indentation from the closing brace line
+            indent = len(line) - len(line.lstrip())
+            indent_str = ' ' * indent
+            
+            # Insert composeOptions with proper indentation
+            new_lines.append(f'{indent_str}composeOptions {{')
+            new_lines.append(f'{indent_str}    compiler {{')
+            new_lines.append(f'{indent_str}        suppressKotlinVersionCompatibilityCheck = true')
+            new_lines.append(f'{indent_str}    }}')
+            new_lines.append(f'{indent_str}}}')
+            inserted = True
+            in_android = False
+        
+        new_lines.append(line)
+    else:
+        new_lines.append(line)
+
+if inserted:
+    with open(file_path, 'w') as f:
+        f.write('\n'.join(new_lines))
+    print("✅ Patched expo-modules-core/android/build.gradle")
+    
+    # Verify the patch
+    with open(file_path, 'r') as f:
+        if "suppressKotlinVersionCompatibilityCheck" in f.read():
+            print("✅ Verification: suppressKotlinVersionCompatibilityCheck found in file")
+        else:
+            print("❌ Verification failed: suppressKotlinVersionCompatibilityCheck NOT found")
+else:
+    print("⚠️ Could not find android block to patch")
+PYTHONFIX
+            else
+              echo "✅ expo-modules-core already patched"
             fi
           fi
           
+          echo ""
+          echo "📄 Verification - checking if patch was applied:"
+          if [ -f node_modules/expo-modules-core/android/build.gradle ]; then
+            if grep -q "suppressKotlinVersionCompatibilityCheck" node_modules/expo-modules-core/android/build.gradle; then
+              echo "✅ Found suppressKotlinVersionCompatibilityCheck in expo-modules-core/android/build.gradle"
+              grep -A 3 "suppressKotlinVersionCompatibilityCheck" node_modules/expo-modules-core/android/build.gradle | head -5
+            else
+              echo "❌ ERROR: suppressKotlinVersionCompatibilityCheck NOT found in expo-modules-core/android/build.gradle"
+              echo "📄 First 20 lines of build.gradle:"
+              head -20 node_modules/expo-modules-core/android/build.gradle
+            fi
+          fi
           echo ""
           echo "📄 gradle.properties (last 3 lines):"
           tail -3 android/gradle.properties || true
@@ -108,50 +161,6 @@ jobs:
           cd android
           ./gradlew assembleRelease -x lint -x test
         env:
-          ANDROID_HOME: \${{ env.ANDROID_SDK_ROOT }}
-
-      - name: Build AAB
-        if: github.event.inputs.build_type == 'aab'
-        run: |
-          cd android
-          ./gradlew bundleRelease -x lint -x test
-        env:
-          ANDROID_HOME: \${{ env.ANDROID_SDK_ROOT }}
-
-      - name: Find APK
-        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
-        id: find_apk
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-          APK_PATH=\$(find android/app/build/outputs/apk -name "*.apk" | head -1)
-          echo "apk_path=\$APK_PATH" >> \$GITHUB_OUTPUT
-          echo "Found APK: \$APK_PATH"
-
-      - name: Find AAB
-        if: github.event.inputs.build_type == 'aab'
-        id: find_aab
-        run: |
-          AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
-          echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
-          echo "Found AAB: $AAB_PATH"
-          AAB_PATH=\$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
-          echo "aab_path=\$AAB_PATH" >> \$GITHUB_OUTPUT
-          echo "Found AAB: \$AAB_PATH"
-
-      - name: Upload APK
-        if: steps.find_apk.outputs.apk_path != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release.apk
-
-      - name: Build APK
-        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
-        run: |
-          cd android
-          ./gradlew assembleRelease -x lint -x test
-        env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
       - name: Build AAB
@@ -169,6 +178,7 @@ jobs:
           APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_PATH"
+
       - name: Find AAB
         if: github.event.inputs.build_type == 'aab'
         id: find_aab
@@ -176,6 +186,7 @@ jobs:
           AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
           echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
           echo "Found AAB: $AAB_PATH"
+
       - name: Upload APK
         if: steps.find_apk.outputs.apk_path != ''
         uses: actions/upload-artifact@v4
