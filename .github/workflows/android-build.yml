@@ -1,0 +1,107 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (apk or aab)'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - aab
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'app.json'
+      - 'app.config.js'
+      - 'package.json'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Clean npm cache and node_modules
+        run: |
+          rm -rf node_modules
+          npm cache clean --force
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+        env:
+          npm_config_legacy_peer_deps: true
+
+      - name: Run expo prebuild (if needed)
+        run: npx expo prebuild --platform android --clean
+        continue-on-error: true
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      - name: Build APK
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
+        run: |
+          cd android
+          ./gradlew assembleRelease -x lint -x test
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Build AAB
+        if: github.event.inputs.build_type == 'aab'
+        run: |
+          cd android
+          ./gradlew bundleRelease -x lint -x test
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Find APK
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
+        id: find_apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+
+      - name: Find AAB
+        if: github.event.inputs.build_type == 'aab'
+        id: find_aab
+        run: |
+          AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
+          echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
+          echo "Found AAB: $AAB_PATH"
+
+      - name: Upload APK
+        if: steps.find_apk.outputs.apk_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.apk
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 7
+
+      - name: Upload AAB
+        if: steps.find_aab.outputs.aab_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.aab
+          path: ${{ steps.find_aab.outputs.aab_path }}
+          retention-days: 7
