@@ -59,7 +59,6 @@ jobs:
           EXPO_NO_TELEMETRY: 1
 
       - name: Fix Kotlin version for Compose compatibility
-        run: |
           echo "🔍 Fixing Kotlin/Compose version compatibility..."
           
           # Add to gradle.properties
@@ -71,36 +70,74 @@ jobs:
             echo "✅ Added to gradle.properties"
           fi
           
-          # Directly patch expo-modules-core build.gradle (the module causing the issue)
-          # Add composeOptions to the android block
-          if [ -f node_modules/expo-modules-core/android/build.gradle ]; then
-            if ! grep -q "suppressKotlinVersionCompatibilityCheck" node_modules/expo-modules-core/android/build.gradle; then
-              # Find the android block and insert composeOptions before its closing brace
-              # Use awk to insert before the last } in the android block
-              awk '
-                /^[[:space:]]*android[[:space:]]*\{/ { in_android=1; android_depth=1 }
-                in_android && /\{/ { android_depth++ }
-                in_android && /\}/ { 
-                  android_depth--
-                  if (android_depth == 0) {
-                    print "    composeOptions {"
-                    print "        compiler {"
-                    print "            suppressKotlinVersionCompatibilityCheck = true"
-                    print "        }"
-                    print "    }"
-                    in_android=0
-                  }
-                }
-                { print }
-              ' node_modules/expo-modules-core/android/build.gradle > /tmp/expo-build.gradle && \
-              mv /tmp/expo-build.gradle node_modules/expo-modules-core/android/build.gradle
-              echo "✅ Patched expo-modules-core/android/build.gradle"
+          # Patch root build.gradle to configure all subprojects
+          if [ -f android/build.gradle ]; then
+            # Check if we already added the fix
+            if ! grep -q "suppressKotlinVersionCompatibilityCheck" android/build.gradle; then
+              # Add subprojects configuration at the end using echo
+              echo "" >> android/build.gradle
+              echo "subprojects {" >> android/build.gradle
+              echo "    afterEvaluate { project ->" >> android/build.gradle
+              echo "        if (project.hasProperty(\"android\") && project.plugins.hasPlugin(\"org.jetbrains.kotlin.android\")) {" >> android/build.gradle
+              echo "            try {" >> android/build.gradle
+              echo "                project.android {" >> android/build.gradle
+              echo "                    composeOptions {" >> android/build.gradle
+              echo "                        compiler {" >> android/build.gradle
+              echo "                            suppressKotlinVersionCompatibilityCheck = true" >> android/build.gradle
+              echo "                        }" >> android/build.gradle
+              echo "                    }" >> android/build.gradle
+              echo "                }" >> android/build.gradle
+              echo "            } catch (Exception e) {" >> android/build.gradle
+              echo "                // Ignore if composeOptions not available" >> android/build.gradle
+              echo "            }" >> android/build.gradle
+              echo "        }" >> android/build.gradle
+              echo "    }" >> android/build.gradle
+              echo "}" >> android/build.gradle
+              echo "✅ Patched root build.gradle"
             fi
           fi
           
           echo ""
           echo "📄 gradle.properties (last 3 lines):"
           tail -3 android/gradle.properties || true
+
+      - name: Build APK
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
+        run: |
+          cd android
+          ./gradlew assembleRelease -x lint -x test
+        env:
+          ANDROID_HOME: \${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Build AAB
+        if: github.event.inputs.build_type == 'aab'
+        run: |
+          cd android
+          ./gradlew bundleRelease -x lint -x test
+        env:
+          ANDROID_HOME: \${{ env.ANDROID_SDK_ROOT }}
+
+      - name: Find APK
+        if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
+        id: find_apk
+        run: |
+          APK_PATH=\$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          echo "apk_path=\$APK_PATH" >> \$GITHUB_OUTPUT
+          echo "Found APK: \$APK_PATH"
+
+      - name: Find AAB
+        if: github.event.inputs.build_type == 'aab'
+        id: find_aab
+        run: |
+          AAB_PATH=\$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
+          echo "aab_path=\$AAB_PATH" >> \$GITHUB_OUTPUT
+          echo "Found AAB: \$AAB_PATH"
+
+      - name: Upload APK
+        if: steps.find_apk.outputs.apk_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.apk
 
       - name: Build APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
