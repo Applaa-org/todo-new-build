@@ -60,25 +60,24 @@ jobs:
 
       - name: Fix Kotlin version for Compose compatibility
         run: |
-          echo "🔍 Checking Kotlin version in android/build.gradle..."
-          if [ -f android/build.gradle ]; then
-            # Show current content for debugging
-            grep -i "kotlin" android/build.gradle || true
-            
-            # Fix both single and double quote patterns (Expo uses single quotes)
-            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
-            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
-            
-            echo "✅ Attempted to patch Kotlin version"
-            grep -i "kotlin" android/build.gradle || true
+          echo "🔍 Fixing Kotlin version for Compose compatibility..."
+          
+          # Method 1: Override kotlin version in gradle.properties (most reliable)
+          if [ -f android/gradle.properties ]; then
+            echo "" >> android/gradle.properties
+            echo "# Fix Kotlin/Compose compatibility - Expo SDK 52 needs Kotlin 1.9.25" >> android/gradle.properties
+            echo "kotlin.version=1.9.25" >> android/gradle.properties
+            echo "✅ Added kotlin.version=1.9.25 to gradle.properties"
           fi
           
-          # Also check gradle.properties
-          if [ -f android/gradle.properties ]; then
-            echo "🔍 Checking gradle.properties..."
-            grep -i "kotlin" android/gradle.properties || true
-            sed -i 's/kotlin.version=1.9.24/kotlin.version=1.9.25/g' android/gradle.properties
+          # Method 2: Also try patching build.gradle for good measure
+          if [ -f android/build.gradle ]; then
+            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
+            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
           fi
+          
+          echo "📄 gradle.properties content:"
+          cat android/gradle.properties || true
 
       - name: Build APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
