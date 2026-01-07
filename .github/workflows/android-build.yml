@@ -59,6 +59,7 @@ jobs:
           EXPO_NO_TELEMETRY: 1
 
       - name: Fix Kotlin version for Compose compatibility
+        run: |
           echo "🔍 Fixing Kotlin/Compose version compatibility..."
           
           # Add to gradle.properties
