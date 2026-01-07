@@ -122,12 +122,22 @@ jobs:
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
         id: find_apk
         run: |
+          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+        id: find_apk
+        run: |
           APK_PATH=\$(find android/app/build/outputs/apk -name "*.apk" | head -1)
           echo "apk_path=\$APK_PATH" >> \$GITHUB_OUTPUT
           echo "Found APK: \$APK_PATH"
 
       - name: Find AAB
         if: github.event.inputs.build_type == 'aab'
+        id: find_aab
+        run: |
+          AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
+          echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
+          echo "Found AAB: $AAB_PATH"
         id: find_aab
         run: |
           AAB_PATH=\$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
@@ -158,8 +168,18 @@ jobs:
 
       - name: Find APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
+        id: find_apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
       - name: Find AAB
         if: github.event.inputs.build_type == 'aab'
+        id: find_aab
+        run: |
+          AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
+          echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
+          echo "Found AAB: $AAB_PATH"
       - name: Upload APK
         if: steps.find_apk.outputs.apk_path != ''
         uses: actions/upload-artifact@v4
