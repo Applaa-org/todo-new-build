@@ -58,6 +58,14 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: 1
 
+      - name: Fix Kotlin version for Compose compatibility
+        run: |
+          # Expo SDK 52 generates Kotlin 1.9.24, but expo-modules-core needs 1.9.25 for Compose Compiler
+          if [ -f android/build.gradle ]; then
+            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
+            echo "✅ Patched Kotlin version to 1.9.25"
+          fi
+
       - name: Build APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
         run: |
