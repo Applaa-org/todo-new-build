@@ -60,30 +60,26 @@ jobs:
 
       - name: Fix Kotlin version for Compose compatibility
         run: |
-          echo "🔍 Fixing Kotlin version for Compose compatibility..."
+          echo "🔍 Fixing Kotlin/Compose version compatibility..."
           
-          # Method 1: Override kotlin version in gradle.properties (most reliable)
           if [ -f android/gradle.properties ]; then
             echo "" >> android/gradle.properties
-            echo "# Fix Kotlin/Compose compatibility - Expo SDK 52 needs Kotlin 1.9.25" >> android/gradle.properties
-            echo "kotlin.version=1.9.25" >> android/gradle.properties
-            echo "✅ Added kotlin.version=1.9.25 to gradle.properties"
+            echo "# Suppress Kotlin/Compose version compatibility check" >> android/gradle.properties
+            echo "# Expo SDK 52 uses Compose Compiler 1.5.15 which wants Kotlin 1.9.25" >> android/gradle.properties
+            echo "# but React Native 0.76 locks Kotlin to 1.9.24" >> android/gradle.properties
+            echo "kotlin.suppress.version.compatibility.check=true" >> android/gradle.properties
+            echo "android.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
+            echo "✅ Added suppress flags to gradle.properties"
+            echo ""
+            echo "📄 gradle.properties content:"
+            cat android/gradle.properties
           fi
-          
-          # Method 2: Also try patching build.gradle for good measure
-          if [ -f android/build.gradle ]; then
-            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
-            sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
-          fi
-          
-          echo "📄 gradle.properties content:"
-          cat android/gradle.properties || true
 
       - name: Build APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
         run: |
           cd android
-          ./gradlew assembleRelease -x lint -x test
+          ./gradlew assembleRelease -x lint -x test -Pkotlin.experimental.suppressKotlinVersionCompatibilityCheck=true
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
@@ -91,7 +87,7 @@ jobs:
         if: github.event.inputs.build_type == 'aab'
         run: |
           cd android
-          ./gradlew bundleRelease -x lint -x test
+          ./gradlew bundleRelease -x lint -x test -Pkotlin.experimental.suppressKotlinVersionCompatibilityCheck=true
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
