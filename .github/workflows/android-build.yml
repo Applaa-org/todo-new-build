@@ -75,27 +75,25 @@ jobs:
           if [ -f android/build.gradle ]; then
             # Check if we already added the fix
             if ! grep -q "suppressKotlinVersionCompatibilityCheck" android/build.gradle; then
-              # Add subprojects configuration at the end
-              cat >> android/build.gradle << 'GRADLEFIX'
-
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty("android") && project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
-            try {
-                project.android {
-                    composeOptions {
-                        compiler {
-                            suppressKotlinVersionCompatibilityCheck = true
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                // Ignore if composeOptions not available
-            }
-        }
-    }
-}
-GRADLEFIX
+              # Add subprojects configuration at the end using echo
+              echo "" >> android/build.gradle
+              echo "subprojects {" >> android/build.gradle
+              echo "    afterEvaluate { project ->" >> android/build.gradle
+              echo "        if (project.hasProperty(\"android\") && project.plugins.hasPlugin(\"org.jetbrains.kotlin.android\")) {" >> android/build.gradle
+              echo "            try {" >> android/build.gradle
+              echo "                project.android {" >> android/build.gradle
+              echo "                    composeOptions {" >> android/build.gradle
+              echo "                        compiler {" >> android/build.gradle
+              echo "                            suppressKotlinVersionCompatibilityCheck = true" >> android/build.gradle
+              echo "                        }" >> android/build.gradle
+              echo "                    }" >> android/build.gradle
+              echo "                }" >> android/build.gradle
+              echo "            } catch (Exception e) {" >> android/build.gradle
+              echo "                // Ignore if composeOptions not available" >> android/build.gradle
+              echo "            }" >> android/build.gradle
+              echo "        }" >> android/build.gradle
+              echo "    }" >> android/build.gradle
+              echo "}" >> android/build.gradle
               echo "✅ Patched root build.gradle"
             fi
           fi
