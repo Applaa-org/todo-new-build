@@ -60,10 +60,24 @@ jobs:
 
       - name: Fix Kotlin version for Compose compatibility
         run: |
-          # Expo SDK 52 generates Kotlin 1.9.24, but expo-modules-core needs 1.9.25 for Compose Compiler
+          echo "🔍 Checking Kotlin version in android/build.gradle..."
           if [ -f android/build.gradle ]; then
+            # Show current content for debugging
+            grep -i "kotlin" android/build.gradle || true
+            
+            # Fix both single and double quote patterns (Expo uses single quotes)
+            sed -i "s/kotlinVersion = '1.9.24'/kotlinVersion = '1.9.25'/g" android/build.gradle
             sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/g' android/build.gradle
-            echo "✅ Patched Kotlin version to 1.9.25"
+            
+            echo "✅ Attempted to patch Kotlin version"
+            grep -i "kotlin" android/build.gradle || true
+          fi
+          
+          # Also check gradle.properties
+          if [ -f android/gradle.properties ]; then
+            echo "🔍 Checking gradle.properties..."
+            grep -i "kotlin" android/gradle.properties || true
+            sed -i 's/kotlin.version=1.9.24/kotlin.version=1.9.25/g' android/gradle.properties
           fi
 
       - name: Build APK
