@@ -62,24 +62,53 @@ jobs:
         run: |
           echo "🔍 Fixing Kotlin/Compose version compatibility..."
           
+          # Add to gradle.properties
           if [ -f android/gradle.properties ]; then
+            sed -i '/androidx.compose.compiler/d' android/gradle.properties
             echo "" >> android/gradle.properties
             echo "# Suppress Kotlin/Compose version compatibility check" >> android/gradle.properties
-            echo "# Expo SDK 52 uses Compose Compiler 1.5.15 which wants Kotlin 1.9.25" >> android/gradle.properties
-            echo "# but React Native 0.76 locks Kotlin to 1.9.24" >> android/gradle.properties
-            echo "kotlin.suppress.version.compatibility.check=true" >> android/gradle.properties
-            echo "android.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
-            echo "✅ Added suppress flags to gradle.properties"
-            echo ""
-            echo "📄 gradle.properties content:"
-            cat android/gradle.properties
+            echo "androidx.compose.compiler.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
+            echo "✅ Added to gradle.properties"
           fi
+          
+          # Patch root build.gradle to configure all subprojects
+          if [ -f android/build.gradle ]; then
+            # Check if we already added the fix
+            if ! grep -q "suppressKotlinVersionCompatibilityCheck" android/build.gradle; then
+              # Add subprojects configuration at the end
+              cat >> android/build.gradle << 'GRADLEFIX'
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android") && project.plugins.hasPlugin("org.jetbrains.kotlin.android")) {
+            try {
+                project.android {
+                    composeOptions {
+                        compiler {
+                            suppressKotlinVersionCompatibilityCheck = true
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore if composeOptions not available
+            }
+        }
+    }
+}
+GRADLEFIX
+              echo "✅ Patched root build.gradle"
+            fi
+          fi
+          
+          echo ""
+          echo "📄 gradle.properties (last 3 lines):"
+          tail -3 android/gradle.properties || true
 
       - name: Build APK
         if: github.event.inputs.build_type == 'apk' || github.event.inputs.build_type == '' || github.event_name == 'push'
         run: |
           cd android
-          ./gradlew assembleRelease -x lint -x test -Pkotlin.experimental.suppressKotlinVersionCompatibilityCheck=true
+          ./gradlew assembleRelease -x lint -x test
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
@@ -87,7 +116,7 @@ jobs:
         if: github.event.inputs.build_type == 'aab'
         run: |
           cd android
-          ./gradlew bundleRelease -x lint -x test -Pkotlin.experimental.suppressKotlinVersionCompatibilityCheck=true
+          ./gradlew bundleRelease -x lint -x test
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
