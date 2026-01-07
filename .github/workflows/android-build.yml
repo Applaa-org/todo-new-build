@@ -125,8 +125,6 @@ jobs:
           APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_PATH"
-        id: find_apk
-        run: |
           APK_PATH=\$(find android/app/build/outputs/apk -name "*.apk" | head -1)
           echo "apk_path=\$APK_PATH" >> \$GITHUB_OUTPUT
           echo "Found APK: \$APK_PATH"
@@ -138,8 +136,6 @@ jobs:
           AAB_PATH=$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
           echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
           echo "Found AAB: $AAB_PATH"
-        id: find_aab
-        run: |
           AAB_PATH=\$(find android/app/build/outputs/bundle -name "*.aab" | head -1)
           echo "aab_path=\$AAB_PATH" >> \$GITHUB_OUTPUT
           echo "Found AAB: \$AAB_PATH"
